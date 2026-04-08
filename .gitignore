@@ -1,0 +1,46 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── 가상환경 ──
+.venv/
+venv/
+env/
+
+# ── 환경 변수 (절대 커밋 금지!) ──
+.env
+.env.local
+*.env
+
+# ── 데이터베이스 (자동 생성됨) ──
+backend/data/*.db
+backend/data/*.sqlite
+
+# ── 학습된 모델 파일 (용량 큰 바이너리) ──
+# 별도 Google Drive / DVC로 관리 권장
+backend/models/*.pkl
+backend/models/*.joblib
+
+# ── Jupyter 체크포인트 ──
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── 로그 ──
+*.log
+logs/

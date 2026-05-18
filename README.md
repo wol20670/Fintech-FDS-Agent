@@ -1,2 +1,264 @@
-# Fintech-FDS-Agent
-지능형 사기 탐지 및 자율 대응 에이전트 (Capstone Design)
+# 🛡️ Fintech FDS Agent
+### 실시간 지능형 사기 탐지 및 자율 대응 에이전트
+
+> 캡스톤 디자인 프로젝트 | 2023162504 원병찬 / 2023162503 양승빈
+
+---
+
+## 📌 프로젝트 개요
+
+비대면 금융 거래의 급증과 함께 사기 수법도 빠르게 지능화되고 있습니다.
+기존 **규칙 기반(Rule-Based) FDS**는 사기꾼이 규칙을 학습해 우회하면 즉시 무력화되는 한계가 있었습니다.
+
+이 프로젝트는 **ML 모델 기반의 자율 판단 시스템**으로,
+
+- 실시간 거래를 **100ms 이내**에 심사하고
+- 위험 점수에 따라 **자동 승인 → 추가인증 → 차단 → 계좌 동결**을 자율 수행하며
+- 모델이 왜 그 판단을 내렸는지 **설명 가능한 AI(XAI)** 로 근거를 함께 제공합니다
+
+---
+
+## 🗂️ 데이터셋
+
+### PaySim (Kaggle)
+
+실제 금융 데이터는 개인정보 보호로 접근이 불가하여,
+실제 모바일 금융 서비스의 거래 패턴을 통계적으로 모방한 합성 데이터셋을 활용했습니다.
+
+| 항목 | 내용 |
+|------|------|
+| 총 거래 건수 | **6,362,620건** |
+| 사기 거래 비율 | 약 **0.13%** (극심한 불균형) |
+| 주요 컬럼 | `step`, `type`, `amount`, `nameOrig`, `oldbalanceOrg`, `newbalanceOrig`, `nameDest`, `oldbalanceDest`, `newbalanceDest`, `isFraud` |
+
+> ⚠️ `Fraud.csv` 파일은 용량 문제로 저장소에 포함되지 않습니다.
+> Kaggle의 [PaySim Financial Fraud Detection Dataset](https://www.kaggle.com/datasets/ealaxi/paysim1)에서 직접 다운로드 후 Colab에 업로드하세요.
+
+### 데이터 불균형 해결 — 하이브리드 샘플링
+
+전체 데이터의 0.13%만이 사기인 극심한 불균형 문제를 해결하기 위해,
+단순 SMOTE 대신 **2단계 하이브리드 샘플링** 전략을 적용했습니다.
+
+```
+Step 1. RandomUnderSampler  →  정상:사기 = 10:1 로 정상 데이터 축소
+Step 2. SMOTE               →  사기 데이터를 정상 데이터의 50% 수준까지 증식
+```
+
+### 피처 엔지니어링
+
+원본 컬럼 외에 도메인 지식 기반의 파생 피처를 직접 생성했습니다.
+
+| 피처 | 설명 |
+|------|------|
+| `balance_diff_orig` | `거래 전 잔액 - 거래 후 잔액 - 거래 금액` → 0이면 정상, 클수록 의심 |
+| `balance_diff_dest` | 수취인 측 잔액 불일치 탐지 |
+| `orig_is_customer` | 송금인이 개인 계좌(C)인지 가맹점(M)인지 구분 |
+| `dest_is_merchant` | 수취인이 가맹점이면 사기 확률 낮음 |
+
+---
+
+## 🧠 모델 구조 — Stacking Ensemble
+
+```
+[입력 데이터]
+     │
+     ├─── XGBoost  ───→  사기 확률 P1
+     │
+     └─── LightGBM ───→  사기 확률 P2
+                               │
+                      [P1, P2] 결합
+                               │
+               Logistic Regression (메타 모델)
+                               │
+                     최종 사기 확률 (0.0 ~ 1.0)
+```
+
+XGBoost와 LightGBM이 각각 독립적으로 사기 확률을 예측하고,
+Logistic Regression 메타 모델이 두 예측을 종합하여 최종 확률을 산출합니다.
+
+### 최종 모델 성능
+
+| 지표 | 결과 | 의미 |
+|------|------|------|
+| **ROC-AUC** | **0.9996** | 정상/사기 구분 능력 거의 완벽 |
+| **Recall** | **99.76%** | 실제 사기 1,000건 중 997건 탐지 |
+| **Precision** | **74.57%** | 사기 판정 중 실제 사기 비율 |
+| **F1-Score** | **0.8534** | Precision과 Recall의 조화 평균 |
+| **Accuracy** | **99.96%** | 전체 거래 정답 비율 |
+
+> 금융 보안에서는 사기를 놓치는 것(미탐)이 정상을 차단하는 것(오탐)보다 훨씬 큰 피해를 야기합니다.
+> 따라서 **Recall을 핵심 지표**로 설정했습니다.
+
+---
+
+## 🏗️ 시스템 아키텍처
+
+```
+Fintech_FDS_Agent_v1/
+│
+├── FDS_Agent_model_v1.ipynb   ← 모델 학습 (Google Colab)
+│
+├── backend/                   ← FastAPI 서버
+│   ├── main.py                ← 서버 진입점
+│   ├── requirements.txt
+│   ├── models/                ← 학습된 모델 파일 위치 (.pkl)
+│   ├── data/                  ← SQLite DB 자동 생성
+│   └── app/
+│       ├── config.py          ← 임계값 등 설정
+│       ├── models/database.py ← DB 스키마 및 더미 데이터
+│       ├── schemas/telegram.py← 거래 전문 스키마 (Request/Response)
+│       ├── services/model_service.py ← ML 추론 엔진
+│       └── routers/
+│           ├── fds.py         ← /api/v1/fds/* 엔드포인트
+│           └── accounts.py    ← /api/v1/accounts/* 엔드포인트
+│
+├── dashboard.py               ← Streamlit 대시보드 진입점
+└── dashboard/                 ← 대시보드 모듈
+    ├── utils/
+    │   ├── constants.py       ← 더미 계좌, 시나리오, 색상 매핑
+    │   ├── api_client.py      ← 백엔드 HTTP 통신 전담
+    │   └── session.py         ← 세션 상태 관리
+    ├── components/
+    │   ├── sidebar.py         ← 사이드바 (시나리오 버튼, 통계)
+    │   └── result_card.py     ← 심사 결과 카드 + 게이지
+    └── pages/
+        ├── tab_evaluate.py    ← 거래 심사 탭
+        ├── tab_logs.py        ← 심사 이력 탭
+        └── tab_stats.py       ← 통계 분석 탭
+```
+
+### FDS 자율 대응 흐름
+
+| 위험 등급 | 점수 범위 | 자율 대응 |
+|-----------|-----------|-----------|
+| 🟢 SAFE | 0.00 ~ 0.10 | 자동 승인 |
+| 🟡 LOW | 0.10 ~ 0.30 | 승인 + 로그 강화 |
+| 🟠 MEDIUM | 0.30 ~ 0.60 | SMS/ARS 추가 인증 요청 |
+| 🔴 HIGH | 0.60 ~ 0.85 | 즉시 거래 차단 |
+| 🚨 CRITICAL | 0.85 ~ 1.00 | 계좌 동결 |
+
+---
+
+## 🚀 실행 방법
+
+### 사전 준비
+
+- Python 3.9 이상
+- Google Colab 계정 (모델 학습용)
+
+### Step 1 — 모델 학습 (Google Colab)
+
+1. `FDS_Agent_model_v1.ipynb`를 Colab에서 실행
+2. `Fraud.csv`를 Google Drive에 업로드
+3. 학습 완료 후 `meta_model.pkl`, `base_models.pkl` 다운로드
+4. `backend/models/` 폴더에 두 파일 복사
+
+> 모델 파일이 없어도 **Rule-Based 엔진으로 자동 전환**되어 실행 가능합니다.
+
+### Step 2 — 백엔드 서버 실행
+
+```bash
+cd backend
+
+# 가상환경 생성 및 활성화 (처음 한 번만)
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # Mac / Linux
+
+# 패키지 설치 (처음 한 번만)
+pip install -r requirements.txt
+pip install streamlit plotly  # 대시보드용
+
+# 서버 실행
+uvicorn main:app --reload --port 8000
+```
+
+서버가 뜨면 아래 주소에서 API 문서를 확인할 수 있습니다.
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+### Step 3 — Streamlit 대시보드 실행
+
+```bash
+# 프로젝트 루트에서 실행 (backend 폴더 아님)
+streamlit run dashboard.py
+```
+
+브라우저에서 http://localhost:8501 로 접속하면 시뮬레이션 대시보드가 열립니다.
+
+---
+
+## 🖥️ 시뮬레이션 대시보드
+
+FastAPI 백엔드와 연동되는 실거래 시뮬레이션 UI입니다.
+
+### 주요 기능
+
+| 탭 | 기능 |
+|----|------|
+| 🔍 거래 심사 | 더미 계좌 선택 → 파라미터 설정 → FDS 심사 실행 → 리스크 게이지 확인 |
+| 📋 심사 이력 | 세션 로그 + 서버 DB 로그 동시 조회, 등급/조치별 필터 |
+| 📊 통계 분석 | 위험 등급 파이차트, 시간대별 바차트, 세션 스캐터 플롯 |
+
+### 사이드바 빠른 시나리오
+
+| 시나리오 | 예상 결과 |
+|----------|-----------|
+| 🟢 정상 소액 이체 | SAFE → 자동 승인 |
+| 🟡 잔액 대비 고액 이체 | LOW ~ MEDIUM |
+| 🟠 신규기기 + 신규수취인 고액 | HIGH → 거래 차단 |
+| 🔴 고위험 계좌 대량 이체 | CRITICAL → 계좌 동결 |
+| 🚨 잔액 초과 거래 | CRITICAL → 즉시 차단 |
+
+---
+
+## 🔌 API 엔드포인트
+
+| Method | 경로 | 설명 |
+|--------|------|------|
+| `POST` | `/api/v1/fds/evaluate` | 단건 거래 FDS 심사 |
+| `POST` | `/api/v1/fds/batch` | 배치(다건) 거래 분석 |
+| `GET` | `/api/v1/fds/health` | 서비스 상태 확인 |
+| `GET` | `/api/v1/fds/logs` | 심사 이력 조회 |
+| `GET` | `/api/v1/fds/stats` | 통계 데이터 (대시보드용) |
+| `GET` | `/api/v1/accounts/` | 전체 계좌 목록 조회 |
+
+---
+
+## 🛠️ 기술 스택
+
+| 구분 | 기술 |
+|------|------|
+| ML 모델 | XGBoost, LightGBM, Scikit-learn (Stacking Ensemble) |
+| 불균형 처리 | Imbalanced-learn (SMOTE + RandomUnderSampler) |
+| 백엔드 | FastAPI, Pydantic, SQLite |
+| 프론트엔드 | Streamlit, Plotly |
+| 학습 환경 | Google Colab |
+| 모델 직렬화 | Joblib |
+
+---
+
+## 📈 현재 진행 상황
+
+- [x] 데이터 전처리 및 피처 엔지니어링
+- [x] XGBoost + LightGBM Stacking Ensemble 학습 (ROC-AUC 0.9996)
+- [x] FastAPI 백엔드 구축 (거래 심사 / 배치 분석 / 심사 이력 / 통계)
+- [x] SQLite 기반 거래 원장 및 FDS 감사 로그 DB
+- [x] Rule-Based 폴백 엔진 (모델 파일 없이도 동작)
+- [x] Streamlit 실거래 시뮬레이션 대시보드 (모듈화 완료)
+- [ ] SHAP 기반 XAI 고도화
+- [ ] Docker 컨테이너화 및 클라우드 배포
+- [ ] LSTM / GNN 기반 시계열·네트워크 분석 도입
+
+---
+
+## 📁 .gitignore 주요 제외 항목
+
+```
+backend/.venv/          # 가상환경
+backend/data/*.db       # SQLite DB (서버 실행 시 자동 생성)
+backend/models/*.pkl    # 학습된 모델 파일 (용량 큰 바이너리)
+```
+
+모델 파일(`.pkl`)은 용량 문제로 저장소에 포함되지 않습니다.
+Colab에서 학습 후 로컬에 직접 다운로드하여 `backend/models/`에 배치하세요.

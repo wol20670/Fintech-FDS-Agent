@@ -77,6 +77,8 @@ class FDSModelService:
 
     def _compute_shap(self, features: np.ndarray) -> dict:
         """SHAP 피처 기여도 계산. 상위 6개만 반환."""
+        if self._explainer is None:
+            return {}
         try:
             shap_vals = self._explainer.shap_values(features)[0]  # 1건
             pairs = sorted(
@@ -111,23 +113,22 @@ class FDSModelService:
                 self._meta_model  = joblib.load(meta_path)
                 self._model_loaded = True
                 logger.info(f"[MODEL] ML 모델 로드 완료 (v2 강화 피처): {model_dir}")
+
+                # SHAP explainer 초기화
+                try:
+                    import shap
+                    xgb_m, _ = self._base_models
+                    self._explainer = shap.TreeExplainer(xgb_m)
+                    logger.info("[MODEL] SHAP TreeExplainer 초기화 완료")
+                except Exception as shap_e:
+                    self._explainer = None
+                    logger.warning(f"[MODEL] SHAP 초기화 실패 (SHAP 없이 동작): {shap_e}")
             else:
                 self._model_loaded = False
                 logger.warning("[MODEL] 모델 파일 미발견 → Rule-Based 폴백")
         except Exception as e:
             self._model_loaded = False
             logger.error(f"[MODEL] 로드 실패: {e}")
-
-        if base_path.exists() and meta_path.exists():
-            self._base_models = joblib.load(base_path)
-            self._meta_model  = joblib.load(meta_path)
-            self._model_loaded = True
-
-            # SHAP explainer 초기화 (XGBoost용)
-            import shap
-            xgb_m, _ = self._base_models
-            self._explainer = shap.TreeExplainer(xgb_m)
-            logger.info("[MODEL] SHAP TreeExplainer 초기화 완료")
 
     @property
     def is_ml_mode(self) -> bool:

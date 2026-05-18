@@ -40,6 +40,7 @@ class FDSModelService:
     _base_models = None
     _meta_model  = None
     _model_loaded: bool = False
+    _explainer   = None
 
     # PaySim LabelEncoder 결과 (학습 시와 동일해야 함)
     # CASH_IN=0, CASH_OUT=1, DEBIT=2, PAYMENT=3, TRANSFER=4

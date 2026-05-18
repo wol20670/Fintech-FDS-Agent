@@ -23,8 +23,10 @@ ACCOUNTS = {
     "C1000000008": {"name": "한*석", "grade": "CAUTION", "balance": 9_800_000,  "type": "C"},
     "C1000000009": {"name": "서*영", "grade": "CAUTION", "balance": 4_500_000,  "type": "C"},
     "C1000000010": {"name": "임*우", "grade": "HIGH",    "balance": 15_000_000, "type": "C"},
+    "C1000000011": {"name": "오*철", "grade": "HIGH", "balance": 0, "type": "C"},
     "M2000000001": {"name": "대형마트A",   "grade": "NORMAL", "balance": 50_000_000, "type": "M"},
     "M2000000002": {"name": "온라인쇼핑B", "grade": "NORMAL", "balance": 30_000_000, "type": "M"},
+    
 }
 
 # ── 빠른 시나리오 ──
@@ -62,10 +64,10 @@ SCENARIOS = [
     },
     {
         "label": "🔴 고위험 계좌 대량 이체",
-        "desc":  "임*우 → 박*진 / 14,000,000원 (잔액 전액)",
+        "desc":  "임*우 → 오*철 / 14,000,000원 (잔액 전액)",
         # 수취인을 개인 계좌(C)로 설정 → 잔액 거의 전액 개인 이체 = 핵심 사기 패턴
         "params": dict(
-            sender="C1000000010", receiver="C1000000003",
+            sender="C1000000010", receiver="C1000000011",
             tx_type="TRANSFER", amount=14_000_000,
             channel="IB", new_device=True, new_receiver=True, cnt_1h=8,
         ),

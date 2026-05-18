@@ -192,6 +192,7 @@ def seed_dummy_data():
             ("CUST_008", "한*석", "010-****-0123", "han***@naver.com",   "CAUTION"),
             ("CUST_009", "서*영", "010-****-4567", "seo***@daum.net",    "CAUTION"),
             ("CUST_010", "임*우", "010-****-8901", "lim***@gmail.com",   "HIGH"),
+            ("CUST_011", "오*철", "010-****-0000", "oh***@gmail.com",   "HIGH")
         ]
         conn.executemany(
             "INSERT INTO customers (customer_id, name, phone_masked, email_masked, risk_grade) VALUES (?,?,?,?,?)",
@@ -212,11 +213,7 @@ def seed_dummy_data():
             ("C1000000008", "CUST_008", "C", 25_000_000.0, 10_000_000.0,"ACTIVE"),
             ("C1000000009", "CUST_009", "C", 8_500_000.0,  10_000_000.0,"ACTIVE"),
             ("C1000000010", "CUST_010", "C", 500_000.0,    5_000_000.0, "ACTIVE"),
-            # 고위험 고객의 두 번째 계좌
-            ("C1000000011", "CUST_010", "C", 200_000.0,    5_000_000.0, "ACTIVE"),
-            # 가맹점 계좌
-            ("M2000000001", "CUST_001", "M", 50_000_000.0, 100_000_000.0, "ACTIVE"),
-            ("M2000000002", "CUST_004", "M", 30_000_000.0, 100_000_000.0, "ACTIVE"),
+            ("C1000000011", "CUST_011", "C", 0.0,          5_000_000.0, "ACTIVE"),
         ]
         conn.executemany(
             "INSERT INTO accounts (account_id, customer_id, account_type, balance, daily_limit, status) VALUES (?,?,?,?,?,?)",

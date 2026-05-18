@@ -137,7 +137,7 @@ class FDSModelService:
 
         # 4. 수취인 잔액 미증가 (자금세탁 계좌 패턴)
         dest_no_increase = 1 if (
-            new_bal_dest == 0 and old_bal_dest == 0
+            old_bal_dest == 0 and recv.account_type == "C"
         ) else 0
 
         return np.array([[

@@ -27,9 +27,12 @@ backend/data/*.sqlite
 backend/models/*.pkl
 backend/models/*.joblib
 
-# ── Jupyter 체크포인트 ──
-.ipynb_checkpoints/
-*/.ipynb_checkpoints/
+# ── 대용량 데이터 원본 파일 제외 ──
+Fraud.csv
+*.csv
+
+# ── 로컬 학습 결과 리포트 이미지 제외 ──
+backend/models/*.png
 
 # ── IDE ──
 .idea/

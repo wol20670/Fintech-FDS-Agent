@@ -370,6 +370,11 @@ class FDSResult(BaseModel):
         description="심사 처리 소요 시간 (밀리초)"
     )
 
+    shap_values: Optional[dict] = Field(
+    default=None,
+    description="SHAP 피처 기여도 (XAI)"
+    )
+
 
 class TransactionResponse(BaseModel):
     """

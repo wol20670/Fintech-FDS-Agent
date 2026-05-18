@@ -48,6 +48,50 @@ class FDSModelService:
         "PAYMENT": 3, "TRANSFER": 4,
     }
 
+    FEATURE_NAMES_KO = {
+    "step":                 "거래 시간대",
+    "amount":               "거래 금액",
+    "oldbalanceOrg":        "송금인 거래전 잔액",
+    "newbalanceOrig":       "송금인 거래후 잔액",
+    "oldbalanceDest":       "수취인 거래전 잔액",
+    "newbalanceDest":       "수취인 거래후 잔액",
+    "isFlaggedFraud":       "고액 이체 플래그",
+    "orig_is_customer":     "송금인 개인 여부",
+    "dest_is_merchant":     "수취인 가맹점 여부",
+    "balance_diff_orig":    "송금인 잔액 불일치",
+    "balance_diff_dest":    "수취인 잔액 불일치",
+    "type_enc":             "거래 유형",
+    "balance_drain_ratio":  "잔액 소진율",
+    "orig_zero_after":      "거래후 잔액 0",
+    "is_large_tx":          "고액 거래 여부",
+    "dest_no_increase":     "수취인 잔액 미증가",
+    }
+
+    FEATURE_COLS = [
+        "step", "amount", "oldbalanceOrg", "newbalanceOrig",
+        "oldbalanceDest", "newbalanceDest", "isFlaggedFraud",
+        "orig_is_customer", "dest_is_merchant",
+        "balance_diff_orig", "balance_diff_dest", "type_enc",
+        "balance_drain_ratio", "orig_zero_after", "is_large_tx", "dest_no_increase",
+    ]
+
+    def _compute_shap(self, features: np.ndarray) -> dict:
+        """SHAP 피처 기여도 계산. 상위 6개만 반환."""
+        try:
+            shap_vals = self._explainer.shap_values(features)[0]  # 1건
+            pairs = sorted(
+                zip(self.FEATURE_COLS, shap_vals.tolist()),
+                key=lambda x: abs(x[1]),
+                reverse=True
+            )[:6]
+            return {
+                self.FEATURE_NAMES_KO.get(k, k): round(v, 4)
+                for k, v in pairs
+            }
+        except Exception as e:
+            logger.warning(f"[SHAP] 계산 실패: {e}")
+            return {}
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -73,6 +117,17 @@ class FDSModelService:
         except Exception as e:
             self._model_loaded = False
             logger.error(f"[MODEL] 로드 실패: {e}")
+
+        if base_path.exists() and meta_path.exists():
+            self._base_models = joblib.load(base_path)
+            self._meta_model  = joblib.load(meta_path)
+            self._model_loaded = True
+
+            # SHAP explainer 초기화 (XGBoost용)
+            import shap
+            xgb_m, _ = self._base_models
+            self._explainer = shap.TreeExplainer(xgb_m)
+            logger.info("[MODEL] SHAP TreeExplainer 초기화 완료")
 
     @property
     def is_ml_mode(self) -> bool:
@@ -308,14 +363,14 @@ class FDSModelService:
     # 메인 심사
     # ════════════════════════════════════════
 
-    def evaluate_transaction(
-        self, telegram: TransactionTelegram
-    ) -> TransactionResponse:
+    def evaluate_transaction(self, telegram: TransactionTelegram) -> TransactionResponse:
         start = time.time()
 
+        shap_data = {}
         if self._model_loaded:
             features   = self._telegram_to_features(telegram)
             risk_score = self._predict_ml(features)
+            shap_data  = self._compute_shap(features)
         else:
             risk_score = self._predict_rule_based(telegram)
 
@@ -333,6 +388,7 @@ class FDSModelService:
                 reason=reason,
                 model_version="FDS_v2_enhanced" if self._model_loaded else "Rule_Based_v2",
                 processing_time_ms=round(proc_ms, 2),
+                shap_values=shap_data,
             ),
         )
 

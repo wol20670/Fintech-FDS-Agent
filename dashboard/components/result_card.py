@@ -48,6 +48,10 @@ def render_result_card(result: dict, ms: int, payload: dict):
     # ── 리스크 게이지 ──
     _render_gauge(score, lvl)
 
+    # SHAP 차트 추가
+    shap_values = r.get("shap_values") or {}
+    _render_shap_chart(shap_values)
+
     # ── 전문 상세 정보 ──
     _render_detail_expander(payload, ms, r)
 
@@ -94,3 +98,34 @@ def _render_detail_expander(payload: dict, ms: int, r: dict):
         c2.markdown(f"**금액:** ₩{body['amount']:,}")
         st.markdown(f"**전문번호:** `{payload['header']['telegram_no']}`")
         st.markdown(f"**처리시간:** {ms}ms | **모델:** {r.get('model_version','v1')}")
+
+def _render_shap_chart(shap_values: dict):
+    """SHAP 피처 기여도 가로 막대 차트."""
+    if not shap_values:
+        return
+
+    st.markdown("#### 🔍 AI 판단 근거 (SHAP 기여도)")
+
+    labels = list(shap_values.keys())
+    values = list(shap_values.values())
+    colors = ["#ef4444" if v > 0 else "#22c55e" for v in values]
+
+    fig = go.Figure(go.Bar(
+        x=values[::-1],
+        y=labels[::-1],
+        orientation="h",
+        marker_color=colors[::-1],
+        text=[f"{v:+.3f}" for v in values[::-1]],
+        textposition="outside",
+    ))
+    fig.update_layout(
+        height=260,
+        margin=dict(t=10, b=10, l=10, r=60),
+        xaxis_title="SHAP 값 (양수=위험 기여 🔴 / 음수=안전 기여 🟢)",
+        xaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="#888"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=12),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("🔴 빨강: 위험도 상승 기여 | 🟢 초록: 위험도 하락 기여 | 상위 6개 피처")

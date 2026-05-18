@@ -1,21 +1,11 @@
-# ════════════════════════════════════════════
-# Fintech FDS Agent - Backend Dependencies
-# ════════════════════════════════════════════
-# 설치: pip install -r requirements.txt
-
-# ── Web Framework ──
-fastapi>=0.110.0
+﻿fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 pydantic>=2.0
 pydantic-settings>=2.0
-
-# ── ML 모델 추론 ──
 numpy>=1.24.0
 scikit-learn>=1.3.0
 xgboost>=2.0.0
 lightgbm>=4.0.0
 joblib>=1.3.0
-
-# ── 유틸리티 ──
-python-multipart>=0.0.6    # 파일 업로드 지원
-python-dotenv>=1.0.0       # .env 파일 로드
+python-multipart>=0.0.6
+python-dotenv>=1.0.0

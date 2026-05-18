@@ -36,7 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.models.database import init_db, seed_dummy_data
-from app.services.model_service import fds_service
+from backend.app.services.model_service_v2 import fds_service
 from app.routers import fds, accounts
 
 # ── model_loader: 동적 모델 다운로드 + 로드 파이프라인 ──

@@ -27,7 +27,7 @@ from app.schemas.telegram import (
     BatchAnalysisRequest, BatchAnalysisResponse,
     RiskLevel, mask_account_id,
 )
-from app.services.model_service import fds_service
+from backend.app.services.model_service_v2 import fds_service
 from app.models.database import (
     insert_transaction, insert_fds_log,
     get_account_info, get_recent_transactions,

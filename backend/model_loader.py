@@ -106,8 +106,8 @@ def _download_file(url: str, dest: Path) -> bool:
     logger.info(f"[MODEL_LOADER] 다운로드 시작: {dest.name}")
 
     try:
-        # gdown.download: fuzzy=True → Drive 공유 링크 자동 파싱
-        output = gdown.download(url, str(dest), quiet=False, fuzzy=False)
+        # gdown.download: URL은 uc?id=... 형식으로 직접 전달 (fuzzy 옵션 미사용)
+        output = gdown.download(url, str(dest), quiet=False)
         if output and dest.exists() and dest.stat().st_size > 0:
             size_kb = dest.stat().st_size / 1024
             logger.info(f"[MODEL_LOADER] ✅ 다운로드 완료: {dest.name} ({size_kb:.1f} KB)")

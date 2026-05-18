@@ -80,11 +80,10 @@ Logistic Regression 메타 모델이 두 예측을 종합하여 최종 확률을
 
 | 지표 | 결과 | 의미 |
 |------|------|------|
-| **ROC-AUC** | **0.9996** | 정상/사기 구분 능력 거의 완벽 |
-| **Recall** | **99.76%** | 실제 사기 1,000건 중 997건 탐지 |
-| **Precision** | **74.57%** | 사기 판정 중 실제 사기 비율 |
-| **F1-Score** | **0.8534** | Precision과 Recall의 조화 평균 |
-| **Accuracy** | **99.96%** | 전체 거래 정답 비율 |
+| **ROC-AUC** | **0.9997** | 정상/사기 구분 능력 거의 완벽 |
+| **Recall** | **99.70%** | 실제 사기 1,000건 중 997건 탐지 |
+| **Precision** | **96.30%** | 사기 판정 중 실제 사기 비율 |
+| **F1-Score** | **0.9797** | Precision과 Recall의 조화 평균 |
 
 > 금융 보안에서는 사기를 놓치는 것(미탐)이 정상을 차단하는 것(오탐)보다 훨씬 큰 피해를 야기합니다.
 > 따라서 **Recall을 핵심 지표**로 설정했습니다.
@@ -96,12 +95,13 @@ Logistic Regression 메타 모델이 두 예측을 종합하여 최종 확률을
 ```
 Fintech_FDS_Agent_v1/
 │
-├── FDS_Agent_model_v1.ipynb   ← 모델 학습 (Google Colab)
+├── better_agent_v1.ipynb      ← 모델 학습 (Google Colab)
 │
 ├── backend/                   ← FastAPI 서버
-│   ├── main.py                ← 서버 진입점
+│   ├── main.py                ← 서버 진입점 (MLOps 파이프라인 포함)
+│   ├── model_loader.py        ← 동적 모델 로더 (Google Drive → 로컬 캐싱)
 │   ├── requirements.txt
-│   ├── models/                ← 학습된 모델 파일 위치 (.pkl)
+│   ├── models/                ← 서버 기동 시 자동 생성 및 다운로드
 │   ├── data/                  ← SQLite DB 자동 생성
 │   └── app/
 │       ├── config.py          ← 임계값 등 설정
@@ -139,23 +139,71 @@ Fintech_FDS_Agent_v1/
 
 ---
 
+## ☁️ MLOps 아키텍처 — 동적 모델 로딩
+
+### 설계 원칙
+
+모델 바이너리(`.pkl`)는 소스코드와 완전히 분리하여 관리합니다.
+
+```
+Git 저장소 (코드)          정적 스토리지 (모델)
+──────────────            ──────────────────────
+main.py                   Google Drive
+model_loader.py    ←───   base_models.pkl
+requirements.txt          meta_model.pkl
+...
+```
+
+### 서버 기동 시 자동 파이프라인
+
+```
+서버 시작 (uvicorn)
+      │
+      ▼
+backend/models/ 에 .pkl 존재 여부 확인
+      │
+  ┌───┴────────────────────┐
+  │ 없음                   │ 있음 (캐시 히트)
+  ▼                        ▼
+Google Drive에서         즉시 joblib.load()
+gdown으로 자동 Pull
+      │
+      ▼
+  joblib.load()
+      │
+      ▼
+fds_service (글로벌 객체) 바인딩
+      │
+      ▼
+  ML 모드 활성화
+  (실패 시 → Rule-Based 폴백)
+```
+
+### 현업 인프라와의 논리적 동일성
+
+> **한 줄 요약:** 정적 스토리지(Google Drive / S3)에서 모델 아티팩트를 서버 기동 시점에 On-demand Pull하여 로컬에 캐싱한 뒤 글로벌 인퍼런스 객체에 바인딩하는 구조는, AWS SageMaker·GCP Vertex AI가 S3/GCS에서 모델을 컨테이너 내 `/tmp/` 로 Pull하여 서빙하는 메커니즘과 완전히 동일한 패턴입니다.
+
+| 항목 | 본 프로젝트 | 현업 (AWS) |
+|------|-------------|------------|
+| 모델 저장소 | Google Drive | S3 Model Registry |
+| Pull 방식 | gdown | boto3.download_file() |
+| 로컬 캐싱 경로 | backend/models/ | /tmp/model/ (컨테이너) |
+| 서빙 진입점 | FastAPI lifespan | SageMaker Endpoint |
+| 폴백 전략 | Rule-Based 엔진 | 이전 버전 모델 |
+| 멱등성 보장 | 파일 존재 체크 | ETag / 버전 해시 비교 |
+
+> **전환 방법:** `model_loader.py` 의 `STORAGE_URLS` 딕셔너리 값만
+> S3 presigned URL 로 교체하면 됩니다. 나머지 코드는 변경 불필요.
+
+---
+
 ## 🚀 실행 방법
 
 ### 사전 준비
 
 - Python 3.9 이상
-- Google Colab 계정 (모델 학습용)
 
-### Step 1 — 모델 학습 (Google Colab)
-
-1. `FDS_Agent_model_v1.ipynb`를 Colab에서 실행
-2. `Fraud.csv`를 Google Drive에 업로드
-3. 학습 완료 후 `meta_model.pkl`, `base_models.pkl` 다운로드
-4. `backend/models/` 폴더에 두 파일 복사
-
-> 모델 파일이 없어도 **Rule-Based 엔진으로 자동 전환**되어 실행 가능합니다.
-
-### Step 2 — 백엔드 서버 실행
+### Step 1 — 백엔드 서버 실행
 
 ```bash
 cd backend
@@ -173,11 +221,15 @@ pip install streamlit plotly  # 대시보드용
 uvicorn main:app --reload --port 8000
 ```
 
+> 📥 서버 최초 기동 시 `backend/models/` 폴더에 모델 파일이 없으면
+> **자동으로 Google Drive에서 다운로드**합니다. (약 30초 소요)
+> 이후 재실행부터는 캐시된 파일을 즉시 로드합니다.
+
 서버가 뜨면 아래 주소에서 API 문서를 확인할 수 있습니다.
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-### Step 3 — Streamlit 대시보드 실행
+### Step 2 — Streamlit 대시보드 실행
 
 ```bash
 # 프로젝트 루트에서 실행 (backend 폴더 아님)
@@ -233,6 +285,7 @@ FastAPI 백엔드와 연동되는 실거래 시뮬레이션 UI입니다.
 | 불균형 처리 | Imbalanced-learn (SMOTE + RandomUnderSampler) |
 | 백엔드 | FastAPI, Pydantic, SQLite |
 | 프론트엔드 | Streamlit, Plotly |
+| MLOps | gdown, Google Drive (정적 모델 스토리지) |
 | 학습 환경 | Google Colab |
 | 모델 직렬화 | Joblib |
 
@@ -241,11 +294,12 @@ FastAPI 백엔드와 연동되는 실거래 시뮬레이션 UI입니다.
 ## 📈 현재 진행 상황
 
 - [x] 데이터 전처리 및 피처 엔지니어링
-- [x] XGBoost + LightGBM Stacking Ensemble 학습 (ROC-AUC 0.9996)
+- [x] XGBoost + LightGBM Stacking Ensemble 학습 (ROC-AUC 0.9997)
 - [x] FastAPI 백엔드 구축 (거래 심사 / 배치 분석 / 심사 이력 / 통계)
 - [x] SQLite 기반 거래 원장 및 FDS 감사 로그 DB
 - [x] Rule-Based 폴백 엔진 (모델 파일 없이도 동작)
 - [x] Streamlit 실거래 시뮬레이션 대시보드 (모듈화 완료)
+- [x] MLOps 동적 모델 로딩 (Google Drive → Startup 자동 Pull → 로컬 캐싱)
 - [ ] SHAP 기반 XAI 고도화
 - [ ] Docker 컨테이너화 및 클라우드 배포
 - [ ] LSTM / GNN 기반 시계열·네트워크 분석 도입
@@ -257,8 +311,8 @@ FastAPI 백엔드와 연동되는 실거래 시뮬레이션 UI입니다.
 ```
 backend/.venv/          # 가상환경
 backend/data/*.db       # SQLite DB (서버 실행 시 자동 생성)
-backend/models/*.pkl    # 학습된 모델 파일 (용량 큰 바이너리)
+backend/models/*.pkl    # 학습된 모델 파일 (서버 기동 시 자동 다운로드)
 ```
 
 모델 파일(`.pkl`)은 용량 문제로 저장소에 포함되지 않습니다.
-Colab에서 학습 후 로컬에 직접 다운로드하여 `backend/models/`에 배치하세요.
+서버 최초 기동 시 `model_loader.py` 가 Google Drive에서 자동으로 다운로드합니다.
